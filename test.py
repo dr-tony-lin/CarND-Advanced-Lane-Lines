@@ -54,7 +54,7 @@ for name in glob.glob(config.test_image_folder + "*.jpg"):
     mpimg.imsave(config.test_image_folder+"lanes/{}-undistort.jpg".format(os.path.basename(name)[0:-4]), image)
     mpimg.imsave(config.test_image_folder+"lanes/{}-final.jpg".format(os.path.basename(name)[0:-4]), lane_image)
     image = image[config.crop[0]:config.crop[1], :, :]
-    perspective = detector.camera.unperspective(image)
+    perspective = detector.camera.parallel(image)
     if perspective is not None:
         mpimg.imsave(config.test_image_folder+"lanes/{}-persp.jpg".format(os.path.basename(name)[0:-4]), perspective)
     if visual is not None:
