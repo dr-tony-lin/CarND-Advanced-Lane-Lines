@@ -55,7 +55,12 @@ python run.py
 
 ## Camera Calibration
 
-Camera calibration was performed by *Camera.calibrate()* which goes through all chessboard images in *camera_cal* folder. For each image, four chessboard corner points in 3D space, (x1, y1, 0), (x2, y2, 0), (x3, y3, 0), (x4, y4, 0) are computed from the chessboard's gemoetry. Then the corresponding 4 point in the image are detected using *cv2.findChessboardCorners()* function. After every image is processed, *cv2.calibrateCamera()* are invoked with the points to obtain mtx, and dist parameters.
+Camera calibration was performed by *Camera.calibrate()* which goes through all chessboard images in *camera_cal* folder. 
+
+For each image, four chessboard corner points in 3D space, (x1, y1, 0), (x2, y2, 0), (x3, y3, 0), (x4, y4, 0) are computed from the chessboard's gemoetry. 
+
+Then the corresponding 4 point in the image are detected using *cv2.findChessboardCorners()* function. After every image is processed, *cv2.calibrateCamera()* are invoked with the points to obtain mtx, and dist parameters.
+
 The mtx, and dist parameters are then used in *cv2.undistort() to undistort camera images.
 
 The following diagrams show some of the chessboard images and their undistorted counterparts.
@@ -67,9 +72,22 @@ The following diagrams show some of the chessboard images and their undistorted 
 | ![image1-2]       | ![image2-2]  		    | ![image3-2]         |
 
 ## Perspective Transformation
-The perspective to parallel transform matrix is computed by *Camera.set_transformation()*. We pass four corners of a parallel trapezoid obtained from a straight lane on an undistorted camera image, and its corresponding rectangle in the parallel space to *cv2.getPerspectiveTransform()*. The inverse transformation is obtained by swapping the two set of corners.
+The perspective to parallel transform matrix is computed by *Camera.set_transformation()*. 
 
-To simply subsequent processing, the parallel trapezoid chosen to be formed by the top, y coordinate 470, and bottom, coordinate 690, of the image after cropping, and the lane. The coordinates were: (260, 0), (565, 0), (1060, 220), (720, 220). When the image is transformed, the resulting rectangle will have coordinated (720, 0), (1060, 0), (1060, 220), (720, 220)
+We pass four corners of a parallel trapezoid obtained from a straight lane on an undistorted camera image, and its corresponding rectangle in the parallel space to *cv2.getPerspectiveTransform()*. The inverse transformation is obtained by swapping the two set of corners.
+
+To simply subsequent processing, the parallel trapezoid chosen was formed by the lane, the top and bottom of the image after cropping. 
+
+The coordinates were:
+```
+(260, 0), (565, 0), (1060, 220), (720, 220).
+```
+When the image is transformed, the resulting rectangle will have coordinated:
+```
+(720, 0), (1060, 0), (1060, 220), (720, 220)
+```
+
+In the pipeline, the final image is scaled to the original image's height. This is not absolutely necessary.
 
 ## The Detection Pipeline (Single Image)
 
