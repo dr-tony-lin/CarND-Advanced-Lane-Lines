@@ -119,11 +119,13 @@ class Lane():
             self.recent_detects.append(points)
             if len(self.recent_detects) > self.history_size:
                 self.recent_detects.pop(0)
-
+            # give more weight to the bottom of the lone
+            w = np.ones((len(points), ), np.float)
+            w[0] = 2.0
             if len(points) > 3: # minimal 4 points for second order polynomial
-                self.current_fit = np.polyfit(points[:, 1], points[:, 0], 2)
-            else:
-                self.current_fit = np.insert(np.polyfit(points[:, 1], points[:, 0], 1), 0, 0.)
+                self.current_fit = np.polyfit(points[:, 1], points[:, 0], 2, w=w)
+            else: # first order polynomial, coefficient 0 (the square term) is 0
+                self.current_fit = np.insert(np.polyfit(points[:, 1], points[:, 0], 1, w=w), 0, 0.)
 
             self.recent_fits.append(self.current_fit)
             if len(self.current_fit) > self.history_size:
@@ -194,11 +196,12 @@ class LaneDetector:
             self.proj_y = config.proj_y
 
         print("Calibrating camera ...")
-        ret, mtx, dist = self.camera.calibrate(config.calibration_folder + "*.jpg", chessboard_shape=config.chessboard_shape)
+        ret, mtx, dist = self.camera.calibrate(config.calibration_folder + "*.jpg",
+                                               chessboard_shape=config.chessboard_shape)
         assert ret, "Failed to calibrate camera!"
 
         if self.config.test:
-            print("Calibrated params: ", mtx, dist)
+            print("Calibrated undistortion params: ", mtx, dist)
 
         imgpoints, objpoints = self.camera.set_transformation(self.config.layer_height*self.config.scan_layers,
                                                               config.proj_x, self.proj_y)

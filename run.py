@@ -40,6 +40,7 @@ if not os.path.exists(test_videos_output):
 
 for name in glob.glob("*.mp4"):
     print("Processing: {} ...".format(name))
+    config.set(name)
     detector.reset()
     output = test_videos_output + name
     if config.save_video_images:

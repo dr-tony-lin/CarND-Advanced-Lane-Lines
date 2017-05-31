@@ -3,6 +3,7 @@ Lane detetion
 '''
 import glob
 import os
+import shutil
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 
@@ -14,17 +15,21 @@ test_undistort = False
 show_undistort = False
 show_lane = False
 
-if not os.path.exists(config.calibration_folder + "undistorted"):
-    os.makedirs(config.calibration_folder + "undistorted")
+if os.path.exists(config.calibration_folder + "undistorted"):
+    shutil.rmtree(config.calibration_folder + "undistorted")
+os.makedirs(config.calibration_folder + "undistorted")
 
-if not os.path.exists(config.test_image_folder + "lanes"):
-    os.makedirs(config.test_image_folder + "lanes")
+if os.path.exists(config.test_image_folder + "lanes"):
+    shutil.rmtree(config.test_image_folder + "lanes")
+os.makedirs(config.test_image_folder + "lanes")
 
-if not os.path.exists(config.test_image_folder + "extract"):
-    os.makedirs(config.test_image_folder + "extract")
+if os.path.exists(config.test_image_folder + "extract"):
+    shutil.rmtree(config.test_image_folder + "extract")
+os.makedirs(config.test_image_folder + "extract")
 
-if not os.path.exists(config.test_image_folder + "thresh"):
-    os.makedirs(config.test_image_folder + "thresh")
+if os.path.exists(config.test_image_folder + "thresh"):
+    shutil.rmtree(config.test_image_folder + "thresh")
+os.makedirs(config.test_image_folder + "thresh")
 
 detector = LaneDetector(config)
 
@@ -46,6 +51,7 @@ if test_undistort:
 
 for name in glob.glob(config.test_image_folder + "*.jpg"):
     print("Test : ", name)
+    config.set(name)
     image = mpimg.imread(name)
     print(image.shape)
     image, visual, trasnsformed, undistort, extracted, sobelx, sobely, sobelm, hls, hsv = detector.detect(image)
@@ -55,10 +61,9 @@ for name in glob.glob(config.test_image_folder + "*.jpg"):
     mpimg.imsave(config.test_image_folder+"lanes/{}-final.jpg".format(os.path.basename(name)[0:-4]), lane_image)
     image = image[config.crop[0]:config.crop[1], :, :]
     perspective = detector.camera.parallel(image)
+    visual = utils.weighted_img(perspective, visual, 0.6, 0.4)
     if perspective is not None:
-        mpimg.imsave(config.test_image_folder+"lanes/{}-persp.jpg".format(os.path.basename(name)[0:-4]), perspective)
-    if visual is not None:
-        mpimg.imsave(config.test_image_folder+"lanes/{}-trace.jpg".format(os.path.basename(name)[0:-4]), visual)
+        mpimg.imsave(config.test_image_folder+"lanes/{}-persp.jpg".format(os.path.basename(name)[0:-4]), visual)
     if trasnsformed is not None:
         mpimg.imsave(config.test_image_folder+"lanes/{}".format(os.path.basename(name)), trasnsformed, cmap='gray')
     if extracted is not None:
