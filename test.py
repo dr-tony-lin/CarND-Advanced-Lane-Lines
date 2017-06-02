@@ -4,6 +4,7 @@ Lane detetion
 import glob
 import os
 import shutil
+import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 
@@ -37,6 +38,7 @@ if test_undistort:
     for name in glob.glob(config.calibration_folder + "*.jpg"):
         print("Undistort : ", name)
         image = mpimg.imread(name)
+        detector.reset()
         undistorted = detector.camera.undistort(image)
         mpimg.imsave(config.calibration_folder + "undistorted/" + os.path.basename(name), undistorted)
         if show_undistort:
@@ -52,22 +54,14 @@ if test_undistort:
 for name in glob.glob(config.test_image_folder + "*.jpg"):
     print("Test : ", name)
     config.set(name)
-    image = mpimg.imread(name)
-    print(image.shape)
-    image, visual, trasnsformed, undistort, extracted, sobelx, sobely, sobelm, hls, hsv = detector.detect(image)
-    overlay = utils.draw_lane((720, 1280, 3), 470, 720, 30, detector.left_lane, detector.right_lane)
-    lane_image = utils.weighted_img(image, overlay)
-    mpimg.imsave(config.test_image_folder+"lanes/{}-undistort.jpg".format(os.path.basename(name)[0:-4]), image)
-    mpimg.imsave(config.test_image_folder+"lanes/{}-final.jpg".format(os.path.basename(name)[0:-4]), lane_image)
-    image = image[config.crop[0]:config.crop[1], :, :]
-    perspective = detector.camera.parallel(image)
-    visual = utils.weighted_img(perspective, visual, 0.6, 0.4)
-    if perspective is not None:
-        mpimg.imsave(config.test_image_folder+"lanes/{}-persp.jpg".format(os.path.basename(name)[0:-4]), visual)
+    detector.reset()
+    image_in = mpimg.imread(name)
+    print(image_in.shape)
+    image, extras = detector.detect(image_in)
+    print(len(extras))
+    visual, trasnsformed, undistort, extracted, sobelx, sobely, sobelm, hls, hsv, maskoff = extras
     if trasnsformed is not None:
         mpimg.imsave(config.test_image_folder+"lanes/{}".format(os.path.basename(name)), trasnsformed, cmap='gray')
-    if extracted is not None:
-        mpimg.imsave(config.test_image_folder+"extract/{}".format(os.path.basename(name)), extracted, cmap='gray')
     if sobelx is not None:
         mpimg.imsave(config.test_image_folder+"thresh/{}-sobelx.jpg".format(os.path.basename(name)[0:-4]), sobelx, cmap='gray')
     if sobely is not None:
@@ -78,6 +72,44 @@ for name in glob.glob(config.test_image_folder + "*.jpg"):
         mpimg.imsave(config.test_image_folder+"thresh/{}-hls.jpg".format(os.path.basename(name)[0:-4]), hls, cmap='gray')
     if hsv is not None:
         mpimg.imsave(config.test_image_folder+"thresh/{}-hsv.jpg".format(os.path.basename(name)[0:-4]), hsv, cmap='gray')
+    if maskoff is not None:
+        mpimg.imsave(config.test_image_folder+"thresh/{}-maskoff.jpg".format(os.path.basename(name)[0:-4]), maskoff, cmap='gray')
+
+    mask = None
+    if detector.left_lane.best_fit is not None:
+        mask = utils.line_mask((720, 1280), detector.left_lane, config.crop[0], config.crop[1], 40,
+                                detector.image_size[0] * 0.03, detector.image_size[0] * 0.05)
+    if detector.right_lane.best_fit is not None:
+        mask_right =  utils.line_mask((720, 1280), detector.right_lane, config.crop[0], config.crop[1], 40,
+                                      detector.image_size[0] * 0.03, detector.image_size[0] * 0.05)
+        if mask is None:
+            mask = mask_right
+        else:
+            mask = np.bitwise_or(mask, mask_right)
+    
+    if extracted is not None:
+        mpimg.imsave(config.test_image_folder+"extract/{}".format(os.path.basename(name)), extracted, cmap='gray')
+    if mask is not None:
+        extracted = np.bitwise_and(extracted, mask)
+        mpimg.imsave(config.test_image_folder+"extract/mask-{}".format(os.path.basename(name)), mask, cmap='gray')
+        mpimg.imsave(config.test_image_folder+"extract/masked-{}".format(os.path.basename(name)), extracted, cmap='gray')
+
+    # Do it again to trigger mask effect
+    image, extras = detector.detect(image_in)
+
+    try:
+        overlay = utils.draw_lane((720, 1280, 3), 470, 720, 30, detector.left_lane, detector.right_lane)
+        lane_image = utils.weighted_img(image, overlay)
+        mpimg.imsave(config.test_image_folder+"lanes/{}-final.jpg".format(os.path.basename(name)[0:-4]), lane_image)
+    except:
+        pass
+    mpimg.imsave(config.test_image_folder+"lanes/{}-undistort.jpg".format(os.path.basename(name)[0:-4]), image)
+    image = image[config.crop[0]:config.crop[1], :, :]
+    perspective = detector.camera.parallel(image)
+    visual = utils.weighted_img(perspective, visual, 0.6, 0.4)
+    
+    if perspective is not None:
+        mpimg.imsave(config.test_image_folder+"lanes/{}-persp.jpg".format(os.path.basename(name)[0:-4]), visual)
 
     if show_lane:
         f, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 8))

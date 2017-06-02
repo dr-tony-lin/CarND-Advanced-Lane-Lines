@@ -3,7 +3,6 @@ Lane detetion
 '''
 import glob
 import os
-import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 from moviepy.editor import VideoFileClip
 
@@ -26,7 +25,7 @@ def process_image(image):
     if clip_name:
         mpimg.imsave(test_videos_output + "{0}{1}.jpg".format(clip_name, clip_seq), image)
 
-    image, _, _, _, _, _, _, _, _, _ = detector.detect(image)
+    image, _ = detector.detect(image)
     overlay = utils.draw_lane(image.shape, config.crop[0], image.shape[0], 30, detector.left_lane, detector.right_lane)
     image = utils.weighted_img(image, overlay)
 
