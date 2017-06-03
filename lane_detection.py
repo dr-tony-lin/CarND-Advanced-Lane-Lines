@@ -88,12 +88,17 @@ class Camera:
         return transformed[0]
 
 class Lane():
-    def __init__(self, min_y, max_y, thresh=75):
+    def __init__(self, min_y, max_y, smooth_factor=0.5, distance_thresh=75, curverature_threshold=100):
         # Minimal, and maximal y coordinate
         self.min_y = min_y
         self.max_y = max_y
+        self.middle = (min_y + max_y) / 2
+        # Line smooth factor for interpolation between previous fit and new fit
+        self.smooth_factor = smooth_factor
         # Max distance between subsequent updates
-        self.thresh = thresh
+        self.distance_thresh = distance_thresh
+        # Max curverature different between subsequent updates
+        self.curverature_threshold = curverature_threshold
         # was the line detected in the last iteration?
         self.detected = False
         # Number of consecutive fail detections
@@ -112,7 +117,8 @@ class Lane():
         self.radius_of_curvature = None
         #distance in meters of vehicle center from the line
         self.line_base_pos = None
-        self.history_size = 3
+        self.history_size = 4
+        self.committed = True
 
     def set(self, points):
         '''
@@ -120,23 +126,33 @@ class Lane():
         '''
         if points is not None and len(points) > 1: # we need at least two points
             w = np.ones((len(points), ), np.float)
-            w[1] = 3.0
+            w[1] = 2.
             if len(points) > 3: # minimal 4 points for second order polynomial
+                w[2] = 1.5
                 fit = np.polyfit(points[:, 1], points[:, 0], 2)
             else:
                 fit = np.insert(np.polyfit(points[:, 1], points[:, 0], 1), 0, 0.)
 
             if self.current_fit is not None:
                 dist = self.dist(fit)
-                if dist[1] > self.thresh: # reject the line as it has exceeded the max change threshold
+                if dist[1] > self.distance_thresh: # reject the line as it has exceeded the max change threshold
                     print("Change in distance too big: ", dist)
                     self.detected = False
                     self.fails += 1
                     return False
                 else:
+                    radius_of_curvature = self.curverature(fit, self.middle)
+                    diff = abs(radius_of_curvature - self.radius_of_curvature)
+                    if 2*diff/(radius_of_curvature+self.radius_of_curvature) > self.curverature_threshold:
+                        print("Change in curverature too big: ", radius_of_curvature, self.radius_of_curvature, radius_of_curvature / diff)
+                        self.detected = False
+                        self.fails += 1
+                        return False
+                    self.radius_of_curvature = radius_of_curvature
                     self.current_fit = fit
             else:
                 self.current_fit = fit
+                self.radius_of_curvature = self.curverature(self.current_fit, self.middle)
 
             self.current = points
             self.recent_detects.append(points)
@@ -150,14 +166,35 @@ class Lane():
             if self.best_fit is None:
                 self.best_fit = self.current_fit
             else: # Should we use recent_detects to compute the best fit?
-                self.best_fit = self.best_fit * 0.4 + self.current_fit * 0.6
+                self.best_fit = self.best_fit * self.smooth_factor + self.current_fit * (1. - self.smooth_factor)
 
             self.detected = True
             self.fails = 0
+            self.committed = False
             return True
 
-    def curverature(self, y, poly):
-        return math.pow((1. + (2*poly[0]*y + poly[1])**2), 3./2.) / abs(2*poly[0])
+    def unset(self):
+        '''
+        Undo last set
+        '''
+        if not self.committed and len(self.recent_detects) > 0:
+            self.committed = True
+            self.current = self.recent_detects[-1]
+            self.current_fit = self.recent_fits[-1]
+            self.recent_detects = self.recent_detects[:-1]
+            self.recent_fits = self.recent_fits[:-1]
+            return True
+        return False
+
+    def commit(self):
+        '''
+        Commit current set, after this, it cannot be unset
+        '''
+        self.committed = True
+
+    def curverature(self, poly, y):
+        c = abs(2*poly[0])/math.pow((1. + (2*poly[0]*y + poly[1])**2), 3./2.)
+        return c
 
     def x(self, y):
         '''
@@ -210,6 +247,8 @@ class LaneDetector:
         config.trapezoid_x = sorted(config.trapezoid_x)
         # The ytop and bottom coordinates of the trapezoid
         config.trapezoid_y = sorted(config.trapezoid_y)
+        self.trapezoid_top = config.trapezoid_x[2] - config.trapezoid_x[1]
+        self.trapezoid_bottom = config.trapezoid_x[3] - config.trapezoid_x[0]
         config.sobel_thresh = sorted(config.sobel_thresh)
         config.magnitude_thresh = sorted(config.magnitude_thresh)
         # Normalized sobel threshold
@@ -263,31 +302,25 @@ class LaneDetector:
         '''
         Apply threshold of the white and yellow colors of the HSV colorspace
         image: the image
+        Returns: the HSV image, the threshed HSV image, the HSV maskoff image for removing lane change mark
         '''
-        if self.config.hsv_thresh is None:
-            return None
         hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
+        if self.config.hsv_thresh is None:
+            return hsv, None, None
         mask = np.zeros((image.shape[0], image.shape[1]), dtype=np.uint8)
         for (lower, upper) in self.config.hsv_thresh: # filter range
             mask |= cv2.inRange(hsv, lower, upper)
-        return mask
-
-    def apply_hsv_maskoff(self, image):
-        '''
-        Apply mask off threshold to lane repair color
-        image: the image
-        '''
         if self.config.hsv_maskoff is None:
-            return None
-        hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
-        mask = np.zeros((image.shape[0], image.shape[1]), dtype=np.uint8)
+            return hsv, mask, None
+        maskoff = np.zeros((image.shape[0], image.shape[1]), dtype=np.uint8)
         for (lower, upper) in self.config.hsv_maskoff: # filter range
-            mask |= cv2.inRange(hsv, lower, upper)
-        return mask == 0
+            maskoff |= cv2.inRange(hsv, lower, upper)
+        return hsv, mask, maskoff == 0
 
     def apply_hls_thresh(self, image):
         '''
         Apply the threshold of the saturation of the HLS colorspace
+        Returns the HLS threshed image
         '''
         if self.hls_thresh is None:
             return None
@@ -301,9 +334,11 @@ class LaneDetector:
         '''
         Apply threshold to the image for extracting lane feature
         image: the image
-        Return: an image with lane features extracted
+        Return: lane extracted image, and a tuple of (sobelx, sobely, sobelm, hls, hsv, maskoff) when
+        test mode is enabled, or None otherwise
         '''
-        gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+        hsv_image, hsv, maskoff = self.apply_hsv_thresh(image)
+        gray = hsv_image[:, :, 2] #cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
         sobelx = np.absolute(cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=self.config.sobel_kernel))
         sobely = np.absolute(cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=self.config.sobel_kernel))
         sobelm = np.sqrt(sobelx * sobelx + sobely * sobely)
@@ -312,8 +347,7 @@ class LaneDetector:
         sobelm = sobelm/(np.amax(sobelm)+1e-6)
         extracted = np.zeros_like(gray, dtype=np.uint8)
         hls = self.apply_hls_thresh(image)
-        hsv = self.apply_hsv_thresh(image)
-        maskoff = self.apply_hsv_maskoff(image)
+
         passed = (((sobelx >= self.sobel_thresh[0]) & (sobelx <= self.sobel_thresh[1]) &
                    (sobely >= self.sobel_thresh[0]) & (sobely <= self.sobel_thresh[1])) |
                   ((sobelm >= self.magnitude_thresh[0]) & (sobelm <= self.magnitude_thresh[1])))
@@ -329,7 +363,7 @@ class LaneDetector:
             if hls is not None:
                 hls_out = np.zeros_like(hls, dtype=np.uint8)
                 hls_out[hls] = 1
-            return extracted, (sobelx, sobely, sobelm, hls_out, hsv, maskoff)
+            return extracted, (sobelx, sobely, sobelm, hls, hsv, maskoff)
         return extracted, None
 
     def preprocess(self, image):
@@ -337,7 +371,8 @@ class LaneDetector:
         Proprecess the image for lane detection. It will un-distort the image, then extract lanes features,
         then apply reverse perspective transformation
         images: the image
-        Return: an image ready for finding lanes
+        Return: undistorted image, transformed image ready for finding lanes, (cropped undistored image,
+        lane extracted image, sobelx, sobely, sobelm, hls, hsv, maskoff) when in test mode, or None otherwise
         '''
         undistorted = self.camera.undistort(image)
         image = undistorted[self.config.crop[0]:self.config.crop[1], :, :]
@@ -363,6 +398,16 @@ class LaneDetector:
             return undistorted, tranformed, None
 
     def draw_window(self, image, x, y, level, box_color=[0, 255, 0], color=[255, 0, 0]):
+        '''
+        Draw a window to show trace of line scan
+        Arguments:
+        image: the image to draw
+        x: x coordinate of the center of the box
+        y: y coordinate of the center of the box
+        level: the current scan level
+        box_coloe: color of the box, default is green
+        color: center point color, default is red
+        '''
         x = int(x)
         y = int(y)
         half = int(self.config.sliding_width/2)
@@ -375,25 +420,46 @@ class LaneDetector:
         '''
         Reset the lines
         '''
-        self.left_lane = Lane(self.config.crop[0], self.config.crop[1], self.config.lane_shift_thresh)
-        self.right_lane = Lane(self.config.crop[0], self.config.crop[1], self.config.lane_shift_thresh)
+        self.left_lane = Lane(self.config.crop[0], self.config.crop[1], self.config.smooth_factor,
+                              self.config.lane_shift_thresh, self.config.curverature_threshold)
+        self.right_lane = Lane(self.config.crop[0], self.config.crop[1], self.config.smooth_factor,
+                              self.config.lane_shift_thresh, self.config.curverature_threshold)
 
     def start_detect(self, image):
         '''
-        Find the starting point for lane detection
+        Find the starting point for lane detection. It incrementally scan the image from the bottom, and increase
+        the scan height until the start point is found.
         image: the image
         '''
         # First find the two starting positions for the left and right lane by using np.sum to get the
         # vertical image slice and then np.convolve the vertical image slice with the window template
         # Sum half bottom of image to get slice, could use a different ratio
         half = self.config.sliding_width/2
-        left_hist = np.sum(image[int(image.shape[0]/2):, :int(image.shape[1]/2)], axis=0)
-        leftx = max(np.argmax(np.convolve(self.convolution, left_hist)) - half, 0)
-        right_hist = np.sum(image[int(image.shape[0]/2):, int(image.shape[1]/2):], axis=0)
-        rightx = min(np.argmax(np.convolve(self.convolution, right_hist))-half+int(image.shape[1]/2), image.shape[1])
+
+        # Find the best starting point on the left
+        divide = self.config.start_divide
+        midium = int(image.shape[1]/2)
+        while divide > 1:
+            left_hist = np.sum(image[int(image.shape[0]/divide):, :midium], axis=0)
+            convolution = np.convolve(self.convolution, left_hist)
+            leftx = int(max(np.argmax(convolution) - half, 0))
+            divide -= 1
+            if convolution[leftx] >= self.config.scan_thresh:
+                break
+
+        # Find the best starting point on the right
+        divide = self.config.start_divide
+        while divide > 1:
+            right_hist = np.sum(image[int(image.shape[0]/divide):, midium:], axis=0)
+            convolution = np.convolve(self.convolution, right_hist)
+            rightx = int(min(np.argmax(convolution)-half+midium, image.shape[1]))
+            divide -= 1
+            if convolution[rightx - midium] >= self.config.scan_thresh:
+                break
+
+        # check the distance between the two points must make sense
         dist = abs(rightx-leftx-(self.config.trapezoid_x[3]-self.config.trapezoid_x[0]))
-        if dist > self.config.image_size[1] * 0.05:
-            # this is a bad begining
+        if dist > self.config.image_size[1] * 0.05: # this is a bad begining
             if self.config.test:
                 print("Bad start at: {0}, {1}, distance: {2}".format(leftx, rightx, dist))
             result = self._previous_start()
@@ -422,8 +488,13 @@ class LaneDetector:
             visual = np.zeros((image.shape[0], image.shape[1], 3), dtype=np.uint8)
         else:
             visual = None
-
+        if self.config.test:
+                print("Start center: ", leftx, rightx)
         # Go through each layer looking for max pixel locations
+        left_misses = 1
+        right_misses = 1
+        left_start = None
+        right_start = None
         for i in range(0, self.config.scan_layers):
             # convolve the window into the vertical slice of the image
             ybot = int(image.shape[0] - i * self.config.layer_height)
@@ -431,12 +502,13 @@ class LaneDetector:
             histogram = np.sum(image[ytop:ybot, :], axis=0)
             # Find the best left centroid by using past left center as a reference
             # Use self.config.sliding_width/2 as offset because convolution signal reference is at
-            # right side of window, not center of window
+            # right side of window, not center of window. The scan width is increased each time we
+            # fail to find a point
             dw = self.config.scan_width - self.config.sliding_width
-            left_min = int(max(leftx + half - self.config.scan_width, 0))
-            left_max = int(min(leftx + half + self.config.scan_width, image.shape[1]))
-            right_min = int(max(rightx + half - self.config.scan_width, 0))
-            right_max = int(min(rightx + half + self.config.scan_width, image.shape[1]))
+            left_min = int(max(leftx + half - left_misses*self.config.scan_width, 0))
+            left_max = int(min(leftx + half + left_misses*self.config.scan_width, image.shape[1]))
+            right_min = int(max(rightx + half - right_misses*self.config.scan_width, 0))
+            right_max = int(min(rightx + half + right_misses*self.config.scan_width, image.shape[1]))
 
             histogram[left_min+dw:left_max-dw] = histogram[left_min+dw:left_max-dw] * 2
             histogram[right_min+dw:right_max-dw] = histogram[right_min+dw:right_max-dw] * 2
@@ -449,58 +521,84 @@ class LaneDetector:
 
             # TODO: try if using average of on points to compute x and y can yield better fits
             ymid = int(ytop + self.config.layer_height/2)
-            if convolution[leftx_tmp] >= self.config.scan_thresh:
+            if convolution[leftx_tmp + half] >= self.config.scan_thresh:
                 # found left lane for that layer, accept the point and set the new leftx
                 leftx = leftx_tmp
                 left_lane.append([leftx, ymid])
+                left_misses = 1
                 if self.config.test: # Draw visualization image
                     self.draw_window(visual, leftx, ymid, i)
             elif i == 0: # the first layer, but we could find y, use the one from start
-                left_lane.append([leftx, ymid])
-                if self.config.test: # Draw visualization image
-                    self.draw_window(visual, leftx, ymid, i)
+                left_start = [leftx, ymid]
+                left_misses = 1
             elif self.config.test:
+                if (left_misses + 1) * self.config.scan_width <= self.config.max_scan_width:
+                    left_misses += 1
                 print("Skip left: ", leftx, ymid, left_min, left_max, convolution[leftx_tmp])
 
-            if convolution[rightx_tmp] >= self.config.scan_thresh: # found right lane for that layer
+            if convolution[rightx_tmp + half] >= self.config.scan_thresh: # found right lane for that layer
                 # found right lane for that layer, accept the point and set the new leftx
                 rightx = rightx_tmp
                 right_lane.append([rightx, ymid])
+                right_misses = 1
                 if self.config.test: # Draw visualization image
                     self.draw_window(visual, rightx, ymid, i)
             elif i == 0: # the first layer, but we could find y, use the one from start
-                right_lane.append([rightx, ymid])
-                if self.config.test: # Draw visualization image
-                    self.draw_window(visual, rightx, ymid, i)
+                right_start = [rightx, ymid]
+                right_misses = 1
             elif self.config.test:
+                if (right_misses + 1) * self.config.scan_width <= self.config.max_scan_width:
+                    right_misses += 1
                 print("Skip right: ", rightx, ymid, right_min, right_max, convolution[rightx_tmp])
 
             if self.config.test:
                 print("Layer center: ", leftx, rightx)
 
-        if len(left_lane) > 0: # we have enough point for a polyline
+        if len(left_lane) == 1 and left_start is not None:
+            # only one point, add the start
+            left_lane = [left_start] + left_lane
+            if self.config.test: # Draw visualization image
+                self.draw_window(visual, left_start[0], left_start[1], 0)
+        if len(right_lane) == 1 and right_start is not None:
+            # only one point, add the start
+            right_lane = [right_start] + right_lane
+            if self.config.test: # Draw visualization image
+                self.draw_window(visual, right_start[0], right_start[1], 0)
+
+        if len(left_lane) >= 2: # we have enough point for a polyline
             left_lane = self.camera.perspective(left_lane)
             left_lane[:, 1] = left_lane[:, 1] + self.config.crop[0]
             if not self.left_lane.set(left_lane):
                 print("Left lane rejected!")
                 print("Left lane: ", self.left_lane.current, left_lane)
             if self.config.test:
-                print("Transform left lane: ", ", new: ", left_lane)
+                print("Transform left lane: ", left_lane)
                 print("Left lane polynomial: ", self.left_lane.current_fit)
         else:
             self.left_lane.set(None)
-        if len(right_lane) > 0: # we have enough point for a polyline
+        if len(right_lane) >= 2: # we have enough point for a polyline
             right_lane = self.camera.perspective(right_lane)
             right_lane[:, 1] = right_lane[:, 1] + self.config.crop[0]
             if not self.right_lane.set(right_lane):
                 print("Right lane rejected!")
-                print("Left lane: ", self.right_lane.current, ", new: ", right_lane)
+                print("Right lane: ", self.right_lane.current, ", new: ", right_lane)
             if self.config.test:
                 print("Transform right lane: ", right_lane)
                 print("Right lane polynomial: ", self.right_lane.current_fit)
         else:
             self.right_lane.set(None)
 
+        # Make sure the distance between left and right lane make sense
+        dist = self.right_lane.dist(self.left_lane)
+        if abs(dist[0]-self.trapezoid_top)/self.trapezoid_top > 0.15 or \
+           abs(dist[1]-self.trapezoid_bottom)/self.trapezoid_bottom > 0.15:
+            # The distance does not mnake sense, undo the set() operation
+            self.right_lane.unset()
+            self.left_lane.unset()
+        else:
+            # We are good, commit lane set()
+            self.right_lane.commit()
+            self.left_lane.commit()
         return visual
 
     def _previous_start(self):

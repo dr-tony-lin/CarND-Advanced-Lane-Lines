@@ -3,6 +3,7 @@ Lane detetion
 '''
 import glob
 import os
+import time
 import matplotlib.image as mpimg
 from moviepy.editor import VideoFileClip
 
@@ -13,6 +14,7 @@ import utils
 test_videos_output = "video_outputs/"
 clip_name = None
 clip_seq = 0
+total_frames = 0
 
 detector = LaneDetector(config)
 config.test = False
@@ -21,7 +23,7 @@ def process_image(image):
     '''
     Callback from video clip
     '''
-    global clip_name, clip_seq, detector
+    global clip_name, clip_seq, detector, total_frames
     if clip_name:
         mpimg.imsave(test_videos_output + "{0}{1}.jpg".format(clip_name, clip_seq), image)
 
@@ -32,11 +34,13 @@ def process_image(image):
     if clip_name:
         mpimg.imsave(test_videos_output + "{0}{1}-detect.jpg".format(clip_name, clip_seq), image)
         clip_seq += 1
+    total_frames += 1
     return image
 
 if not os.path.exists(test_videos_output):
     os.makedirs(test_videos_output)
 
+total_time = 0
 for name in glob.glob("*.mp4"):
     print("Processing: {} ...".format(name))
     config.set(name)
@@ -46,5 +50,9 @@ for name in glob.glob("*.mp4"):
         clip_name = name
         clip_seq = 0
     clip = VideoFileClip(name)
+    start = time.time()
     new_clip = clip.fl_image(process_image) #NOTE: this function expects color images!!
     new_clip.write_videofile(output, audio=False)
+    total_time += time.time() - start
+
+print("Processed {0} frames in {1:0.2} seconds, rate: {2} frame/sec".format(total_frames, total_time, total_frames/total_time))

@@ -59,30 +59,43 @@ config.test_image_folder = "test_images/"
 config.image_size = (720, 1280)
 # Chessboard cells' shape
 config.chessboard_shape = (9,6)
-# The number of vertical layers on the transformed image for used for lane detection
-config.scan_layers = 16
 # Height of a scan layer
-config.layer_height = 90
+config.layer_height = 60
+# When we start scan an image for the initial left and right points, we divide the image
+# height by the start_divide, then we search the initial point by looping from start_divide to 2.
+# In each loop, the bottom 1/start_divide portion of the image is search
+# The loop terminates until we find a starting point or we reach half of the image
+config.start_divide = 6
+# The number of vertical layers on the transformed image for used for lane detection
+config.scan_layers = 12
+# Height of a scan layer
+config.layer_height = 60
 # Width of the sliding windows in each scan
 config.sliding_width = 50
 # Width of the scan range to the left and right of the lane detected in the layer below
-config.scan_width = 100
+config.scan_width = 75
+# When scan for lane line, we increase the window scan window after a miss until we reach the max_scan_width
+config.max_scan_width = 150
 # The number of on pixels in a sliding window that need to be on for the window to be considered 
-config.scan_thresh_ratio = 0.15
+config.scan_thresh_ratio = 0.125
+# Lane smooth factor, p = p * smooth_factor + (*1 - smooth_factor) * p1
+config.smooth_factor = 0.4
+# Curverature change threshold between subsequent lines
+config.curverature_threshold = 1000
 # Sobel detection kernel
 config.sobel_kernel = 3
 # Sobel threshold
 config.sobel_thresh = (20, 100)
 # Sobel magnitude threshold 
-config.magnitude_thresh = (80, 180)
+config.magnitude_thresh = (80, 100)
 # HSL colorspace satuation threshold
 config.hls_thresh = None #(160, 225)
 # HSV threshold to filter image by white and yellow colors. The first range is for pure white,
 # the second is for near white which can be any color with low saturation, and the third is for yellow
 config.hsv_thresh = [(np.uint8([0, 0, 215]), np.uint8([180, 30, 255])),
-                     (np.uint8([18, 80, 120]), np.uint8([25, 255, 255]))]
+                     (np.uint8([14, 80, 100]), np.uint8([30, 255, 255]))]
 
 # Lane change mark color
-config.hsv_maskoff = [(np.uint8([0, 0, 0]), np.uint8([180, 30, 120]))]
+config.hsv_maskoff = [(np.uint8([0, 0, 0]), np.uint8([180, 50, 150]))]
 
 config.set()

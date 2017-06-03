@@ -1,6 +1,41 @@
+'''
+Utilities
+'''
+
 import numpy as np
 import cv2
 from config import config
+
+def gaussian_blur(img, kernel_size):
+    """Applies a Gaussian Noise kernel"""
+    return cv2.GaussianBlur(img, (kernel_size, kernel_size), 0)
+
+def normalize(img):
+    '''
+    Normalize the grayscale image
+
+    Arguments:
+    a: the grayscale image to normalize
+    Return: the normalized grayscale image
+    '''
+    if img.dtype != np.float32:
+        img = np.array(img, dtype=np.float32)
+    low = np.amin(img, axis=(0, 1))
+    high = np.amax(img, axis=(0, 1))
+    mid = (high + low) * 0.5
+    dis = (high - low + 0.1) * 0.5  # +0.1 in case min = max
+    return (img - mid) / dis
+
+def grayscale(img):
+    '''
+    Convert the image to grayscale
+
+    Arguments:
+    img: the image to convert to grayscale
+    Return: the converted grayscale image
+
+    '''
+    return cv2.equalizeHist(cv2.cvtColor(img, cv2.COLOR_RGB2GRAY))
 
 def draw_lane(shape, top, bottom, step, left, right):
     # Create an image to draw the lines on
