@@ -589,12 +589,12 @@ class LaneDetector:
                 print("Layer center: ", leftx, rightx)
 
         # TODO: Try the idea of creating one side from the other when one is good and another is bad
-        if len(left_lane) < 5 and left_start is not None:
+        if len(left_lane) == 1 and left_start is not None:
             # only one point, add the start
             left_lane = [left_start] + left_lane
             if self.config.test: # Draw visualization image
                 self.draw_window(visual, left_start[0], left_start[1], 0)
-        if len(right_lane) < 5 and right_start is not None:
+        if len(right_lane) ==1 and right_start is not None:
             # only one point, add the start
             right_lane = [right_start] + right_lane
             if self.config.test: # Draw visualization image
