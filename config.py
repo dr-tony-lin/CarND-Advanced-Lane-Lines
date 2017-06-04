@@ -78,10 +78,16 @@ config.scan_width = 75
 config.max_scan_width = 150
 # The number of on pixels in a sliding window that need to be on for the window to be considered 
 config.scan_thresh_ratio = 0.125
+# The lane width variation threshold
+config.width_variation = 0.15
+# The maximal number of detection failures to trigger a reset
+config.failure_reset_thresh = 3
+# The number of on pixels in a sliding window that need to be on for the window to be considered 
+config.scan_thresh_ratio = 0.125
 # Lane smooth factor, p = p * smooth_factor + (*1 - smooth_factor) * p1
 config.smooth_factor = 0.4
 # Curverature change threshold between subsequent lines
-config.curverature_threshold = 1000
+config.curverature_threshold = 100
 # Sobel detection kernel
 config.sobel_kernel = 3
 # Sobel threshold
@@ -89,7 +95,7 @@ config.sobel_thresh = (20, 100)
 # Sobel magnitude threshold 
 config.magnitude_thresh = (80, 100)
 # HSL colorspace satuation threshold
-config.hls_thresh = None #(160, 225)
+config.hls_thresh = (160, 225)
 # HSV threshold to filter image by white and yellow colors. The first range is for pure white,
 # the second is for near white which can be any color with low saturation, and the third is for yellow
 config.hsv_thresh = [(np.uint8([0, 0, 215]), np.uint8([180, 30, 255])),

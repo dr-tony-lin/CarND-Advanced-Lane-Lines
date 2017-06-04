@@ -61,11 +61,14 @@ def draw_lane(shape, top, bottom, step, left, right):
     cv2.fillPoly(image, np.int_([pts]), (0, 255, 0))
     return image
 
-def line_mask(shape, line, top, bottom, step, top_width, bottom_width):
+def line_mask(image_or_shape, line, top, bottom, step, top_width, bottom_width):
     '''
     Create a line mask
     '''
-    image = np.zeros((bottom - top, shape[1]), dtype=np.uint8)
+    if isinstance(image_or_shape, tuple):
+        image = np.zeros((bottom - top, image_or_shape[1]), dtype=np.uint8)
+    else:
+        image = image_or_shape
     left_points = []
     right_points = []
     grad = (bottom_width - top_width) / (bottom - top)

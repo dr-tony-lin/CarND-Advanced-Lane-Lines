@@ -76,23 +76,21 @@ for name in glob.glob(config.test_image_folder + "*.jpg"):
         mpimg.imsave(config.test_image_folder+"thresh/{}-maskoff.jpg".format(os.path.basename(name)[0:-4]), maskoff, cmap='gray')
 
     mask = None
-    if detector.left_lane.best_fit is not None:
+    if detector.left_lane.detected:
+        print("Creating left lane mask ...")
         mask = utils.line_mask((720, 1280), detector.left_lane, config.crop[0], config.crop[1], 40,
                                 detector.image_size[0] * 0.03, detector.image_size[0] * 0.05)
-    if detector.right_lane.best_fit is not None:
-        mask_right =  utils.line_mask((720, 1280), detector.right_lane, config.crop[0], config.crop[1], 40,
+    if detector.right_lane.detected:
+        print("Creating right lane mask ...")
+        utils.line_mask((720, 1280) if mask is None else mask, detector.right_lane, config.crop[0], config.crop[1], 40,
                                       detector.image_size[0] * 0.03, detector.image_size[0] * 0.05)
-        if mask is None:
-            mask = mask_right
-        else:
-            mask = np.bitwise_or(mask, mask_right)
-    
+
     if extracted is not None:
         mpimg.imsave(config.test_image_folder+"extract/{}".format(os.path.basename(name)), extracted, cmap='gray')
-    if mask is not None:
-        extracted = np.bitwise_and(extracted, mask)
-        mpimg.imsave(config.test_image_folder+"extract/mask-{}".format(os.path.basename(name)), mask, cmap='gray')
-        mpimg.imsave(config.test_image_folder+"extract/masked-{}".format(os.path.basename(name)), extracted, cmap='gray')
+        if mask is not None:
+            extracted = np.bitwise_and(extracted, mask)
+            mpimg.imsave(config.test_image_folder+"extract/mask-{}".format(os.path.basename(name)), mask, cmap='gray')
+            mpimg.imsave(config.test_image_folder+"extract/masked-{}".format(os.path.basename(name)), extracted, cmap='gray')
 
     # Do it again to trigger mask effect
     image, extras = detector.detect(image_in)
