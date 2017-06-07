@@ -95,13 +95,12 @@ config.sobel_thresh = (20, 100)
 # Sobel magnitude threshold 
 config.magnitude_thresh = (80, 100)
 # HSL colorspace satuation threshold
-config.hls_thresh = (160, 225)
+config.hls_thresh = None#(160, 225)
 # HSV threshold to filter image by white and yellow colors. The first range is for pure white,
 # the second is for near white which can be any color with low saturation, and the third is for yellow
 config.hsv_thresh = [(np.uint8([0, 0, 215]), np.uint8([180, 30, 255])),
                      (np.uint8([14, 80, 100]), np.uint8([30, 255, 255]))]
-
-# Lane change mark color
+# Lane change mark colors
 config.hsv_maskoff = [(np.uint8([0, 0, 0]), np.uint8([180, 50, 150]))]
 
 config.set()

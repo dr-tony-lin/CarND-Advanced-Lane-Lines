@@ -55,11 +55,11 @@ for name in glob.glob(config.test_image_folder + "*.jpg"):
     print("Test : ", name)
     config.set(name)
     detector.reset()
-    image_in = mpimg.imread(name)
+    image_in = utils.gaussian_blur(mpimg.imread(name), 7)
     print(image_in.shape)
     image, extras = detector.detect(image_in)
     print(len(extras))
-    visual, trasnsformed, undistort, extracted, sobelx, sobely, sobelm, hls, hsv, maskoff = extras
+    visual, trasnsformed, undistort, extracted, sobelx, sobely, sobelm, hls, hsv, maskoff= extras
     if trasnsformed is not None:
         mpimg.imsave(config.test_image_folder+"lanes/{}".format(os.path.basename(name)), trasnsformed, cmap='gray')
     if sobelx is not None:

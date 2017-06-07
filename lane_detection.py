@@ -334,16 +334,16 @@ class LaneDetector:
         Returns: the HSV image, the threshed HSV image, the HSV maskoff image for removing lane change mark
         '''
         hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
-        if self.config.hsv_thresh is None:
-            return hsv, None, None
-        mask = np.zeros((image.shape[0], image.shape[1]), dtype=np.uint8)
-        for (lower, upper) in self.config.hsv_thresh: # filter range
-            mask |= cv2.inRange(hsv, lower, upper)
-        if self.config.hsv_maskoff is None:
-            return hsv, mask, None
-        maskoff = np.zeros((image.shape[0], image.shape[1]), dtype=np.uint8)
-        for (lower, upper) in self.config.hsv_maskoff: # filter range
-            maskoff |= cv2.inRange(hsv, lower, upper)
+        mask = None
+        maskoff = None
+        if self.config.hsv_thresh is not None:
+            mask = np.zeros((image.shape[0], image.shape[1]), dtype=np.uint8)
+            for (lower, upper) in self.config.hsv_thresh: # filter range
+                mask |= cv2.inRange(hsv, lower, upper)
+        if self.config.hsv_maskoff is not None:
+            maskoff = np.zeros((image.shape[0], image.shape[1]), dtype=np.uint8)
+            for (lower, upper) in self.config.hsv_maskoff: # filter range
+                maskoff |= cv2.inRange(hsv, lower, upper)
         return hsv, mask, maskoff == 0
 
     def apply_hls_thresh(self, image):
@@ -370,10 +370,8 @@ class LaneDetector:
         sobelm: the sobel magnitude threshed image
         hls: the HLS colorspace threshed image
         hsv: the HSV colorspace threshed image
-        maskoff: the HSV colorspace threshed image to mask off dark color due to lane change 
+        maskoff: the HSV colorspace threshed image to mask off dark color due to lane change
         '''
-        # TODO 1). For HSV, to avoid fall color (yellow) problem, try to apply filter to remove thick yellow strips
-        #      2). For maskoff, try to apply filter to thicken the mask
         hsv_image, hsv, maskoff = self.apply_hsv_thresh(image)
         gray = hsv_image[:, :, 2] #cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
         sobelx = np.absolute(cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=self.config.sobel_kernel))
@@ -388,6 +386,7 @@ class LaneDetector:
         passed = (((sobelx >= self.sobel_thresh[0]) & (sobelx <= self.sobel_thresh[1]) &
                    (sobely >= self.sobel_thresh[0]) & (sobely <= self.sobel_thresh[1])) |
                   ((sobelm >= self.magnitude_thresh[0]) & (sobelm <= self.magnitude_thresh[1])))
+
         if hls is not None:
             passed = passed | hls
         if hsv is not None:
